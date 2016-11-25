@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,10 +8,11 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types"
-	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/network"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/urfave/cli"
 )
 
 type Event struct {
@@ -36,17 +36,17 @@ func doRoutestration(containerId string, c *client.Client, gw string) bool {
 
 	enable := false
 	for _, env := range inspectedContainer.Config.Env {
-		if env == "ENABLE_ROUTESTRATOR=1" {
+		if env == "ENABLE_EGRESSTRATOR=1" {
 			enable = true
 			break
 		}
 	}
 
 	if !enable {
-		log.Printf("Not enabling routestrator for %v\n", containerId)
+		log.Printf("Not enabling egresstrator for %v\n", containerId)
 		return false
 	}
-	log.Printf("Enabling routestrator for %v\n", containerId)
+	log.Printf("Enabling egresstrator for %v\n", containerId)
 
 	config := container.Config{
 		Image: "bonniernews/routestrator:latest",
@@ -72,30 +72,38 @@ func doRoutestration(containerId string, c *client.Client, gw string) bool {
 }
 
 func main() {
-	gw := os.Args[1]
-	log.Printf("Will set gateway to %v\n", gw)
-
-	dockerClient, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-	reader, err := dockerClient.Events(context.TODO(), types.EventsOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer reader.Close()
-
-	d := json.NewDecoder(reader)
-	for {
-		var event Event
-		if err := d.Decode(&event); err != nil {
-			if err == io.EOF {
-				break
+	app := cli.NewApp()
+	app.Name = "egresstrator"
+	app.Usage = "Set egress rules in network namespaces"
+	app.Action = func(c *cli.Context) error {
+		log.Println("Starting egresstrator...")
+		gw := "127.0.0.1"
+		if c.NArg() > 0 {
+			gw = c.Args().Get(0)
+		}
+		log.Printf("Will set gateway to %v\n", gw)
+		dockerClient, err := client.NewEnvClient()
+		if err != nil {
+			log.Fatal(err)
+		}
+		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
+	Loop:
+		for {
+			select {
+			case err := <-errs:
+				if err != nil && err != io.EOF {
+					log.Fatal(err)
+				}
+				break Loop
+			case e := <-msg:
+				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
+				if e.Status == "start" && e.Type == "container" {
+					go doRoutestration(e.ID, dockerClient, gw)
+				}
 			}
-			log.Println(err)
 		}
-		if event.Status == "start" && event.Type == "container" {
-			go doRoutestration(event.Id, dockerClient, gw)
-		}
+		return nil
+
 	}
+	app.Run(os.Args)
 }
