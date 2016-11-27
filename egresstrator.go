@@ -57,14 +57,15 @@ func doRoutestration(containerId string, c *client.Client, env []string) bool {
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
+		AutoRemove:  true,
 	}
 	containerName := fmt.Sprintf("routestrator-%v", containerId)
-	createResp, err := c.ContainerCreate(context.TODO(), &config, &hostConfig, &network.NetworkingConfig{}, containerName)
+	createResp, err := c.ContainerCreate(context.Background(), &config, &hostConfig, &network.NetworkingConfig{}, containerName)
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-	err = c.ContainerStart(context.TODO(), createResp.ID, types.ContainerStartOptions{})
+	err = c.ContainerStart(context.Background(), createResp.ID, types.ContainerStartOptions{})
 	if err != nil {
 		log.Println(err)
 		return false
