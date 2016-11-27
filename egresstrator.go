@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -27,7 +28,7 @@ type Container struct {
 	Image string
 }
 
-func doRoutestration(containerId string, c *client.Client, gw string) bool {
+func doRoutestration(containerId string, c *client.Client, env []string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -50,7 +51,8 @@ func doRoutestration(containerId string, c *client.Client, gw string) bool {
 
 	config := container.Config{
 		Image: "bonniernews/routestrator:latest",
-		Cmd:   []string{gw},
+		Cmd:   []string{"0.0.0.0/0"},
+		Env:   env,
 	}
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
@@ -75,13 +77,46 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "egresstrator"
 	app.Usage = "Set egress rules in network namespaces"
+	app.Version = "0.0.1"
+	app.Compiled = time.Now()
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "consul, c",
+			Value:  "127.0.0.1:8500",
+			Usage:  "Consul address",
+			EnvVar: "CONSUL_HTTP_ADDR",
+		},
+		cli.StringFlag{
+			Name:   "consul-token, t",
+			Usage:  "Consul token",
+			EnvVar: "CONSUL_HTTP_TOKEN",
+		},
+		cli.StringFlag{
+			Name:   "kv-path, k",
+			Usage:  "Consul K/V path for egress ACL's",
+			Value:  "egress/acl/",
+			EnvVar: "CONSUL_PATH",
+		},
+		cli.StringFlag{
+			Name:   "template, f",
+			Usage:  "Custom consul template",
+			EnvVar: "CONSUL_TEMPLATE",
+		},
+	}
+
 	app.Action = func(c *cli.Context) error {
 		log.Println("Starting egresstrator...")
-		gw := "127.0.0.1"
-		if c.NArg() > 0 {
-			gw = c.Args().Get(0)
+		// handle args
+		dockerEnv := []string{}
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_ADDR=%v", c.String("consul")))
+		if c.GlobalIsSet("consul-token") {
+			dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEM=%v", c.String("consul-token")))
 		}
-		log.Printf("Will set gateway to %v\n", gw)
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.String("kv-path")))
+		if c.GlobalIsSet("template") {
+			dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.String("template")))
+		}
+		log.Println(dockerEnv)
 		dockerClient, err := client.NewEnvClient()
 		if err != nil {
 			log.Fatal(err)
@@ -98,7 +133,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doRoutestration(e.ID, dockerClient, gw)
+					go doRoutestration(e.ID, dockerClient, dockerEnv)
 				}
 			}
 		}
