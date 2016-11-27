@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -28,7 +29,7 @@ type Container struct {
 	Image string
 }
 
-func doRoutestration(containerId string, c *client.Client, env []string) bool {
+func doRoutestration(containerId string, c *client.Client, dockerEnv []string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -37,9 +38,11 @@ func doRoutestration(containerId string, c *client.Client, env []string) bool {
 
 	enable := false
 	for _, env := range inspectedContainer.Config.Env {
-		if env == "ENABLE_EGRESSTRATOR=1" {
+		if env == "EGRESSTRATOR_ENABLE=1" {
 			enable = true
-			break
+		}
+		if strings.HasPrefix(env, "EGRESSTRATOR_ACL") {
+			dockerEnv = append(dockerEnv, env)
 		}
 	}
 
@@ -52,7 +55,7 @@ func doRoutestration(containerId string, c *client.Client, env []string) bool {
 	config := container.Config{
 		Image: "bonniernews/routestrator:latest",
 		Cmd:   []string{"0.0.0.0/0"},
-		Env:   env,
+		Env:   dockerEnv,
 	}
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
@@ -77,7 +80,8 @@ func doRoutestration(containerId string, c *client.Client, env []string) bool {
 func main() {
 	app := cli.NewApp()
 	app.Name = "egresstrator"
-	app.Usage = "Set egress rules in network namespaces"
+	app.Usage = "Set egress rules in network namespaces.\n   Enable egresstrator with EGRESSTRATOR_ENABLE=1 in your container.\n" +
+		"   Specify egress rules with EGRESSTRATOR_ACL=myservice,otherservice"
 	app.Version = "0.0.1"
 	app.Compiled = time.Now()
 	app.Flags = []cli.Flag{
@@ -117,7 +121,6 @@ func main() {
 		if c.GlobalIsSet("template") {
 			dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.String("template")))
 		}
-		log.Println(dockerEnv)
 		dockerClient, err := client.NewEnvClient()
 		if err != nil {
 			log.Fatal(err)
