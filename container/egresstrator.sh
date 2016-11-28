@@ -10,15 +10,20 @@ usage() {
 set_egress() {
     echo "set-egress"
     /usr/bin/consul-template \
-    -template "iptables.ctmpl:/iptables:egresstrator run" \
+    -template "iptables.ctmpl:/iptables:/egresstrator.sh run" \
+    -wait 1s:2s \
     -once
+    cat /iptables
 }
 
 clear_egress() {
     echo "clear-egress"
+    iptables -F
 }
 
 run() {
+    sleep 1
+    cat /iptables
     cat /iptables | iptables-restore
     exit 0
 }
@@ -40,3 +45,5 @@ case $1 in
         ;;
     *)
         usage
+    ;;
+esac

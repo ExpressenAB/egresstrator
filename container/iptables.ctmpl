@@ -1,0 +1,61 @@
+#
+# iptables for egresstrator
+#
+#
+{{ $acls := env "EGRESSTRATOR_ACL"| split "," -}}
+{{ $path := env "CONSUL_PATH" -}}
+{{ $policy := "REJECT"}}
+#
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+# Setup chains
+-N dns-chain
+-A dns-chain -d 10.0.0.0/8 -p udp --dport 53 -j RETURN
+-A dns-chain -d 172.16.0.0/16 -p udp --dport 53 -j RETURN
+-A dns-chain -d 192.168.0.0/16 -p udp --dport 53 -j RETURN
+-A dns-chain -d 8.8.8.8/32 -p udp --dport 53 -j RETURN
+-A dns-chain -d 4.4.4.4/32 -p udp --dport 53 -j RETURN
+-A dns-chain -p udp --dport 53 -j DROP
+{{range tree $path }}
+
+# Service: {{.Key}}
+{{ if in $acls .Key}}# Allowed {{.Key}}
+{{else}}
+{{$svcs := .Value|split "\n" -}}
+{{range $svc := $svcs -}}
+{{if $svc|regexMatch "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}:(tcp|udp)/[0-9]{1,5}$" -}}
+#ip: {{$svc}}
+{{$ip := index ($svc|split ":") 0 -}}
+{{$protoport := index ($svc|split ":") 1 -}}
+{{$proto := index ($protoport|split "/") 0 -}}
+{{$port := index ($protoport|split "/") 1 -}}
+-A OUTPUT -d {{$ip}} -p {{$proto}} -m {{$proto}} --dport {{$port}} -m conntrack --ctstate NEW -j {{$policy}}
+{{end -}}
+{{if $svc|regexMatch "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}:(tcp|udp)/[0-9]{1,5}-[0-9]{1,5}" -}}
+#ip/mask: {{$svc}}
+{{$ip := index ($svc|split ":") 0 -}}
+{{$protoport := index ($svc|split ":") 1 -}}
+{{$proto := index ($protoport|split "/") 0 -}}
+{{$port := index ($protoport|split "/") 1 -}}
+{{$sport := index ($port|split "-") 0 -}}
+{{$fport := index ($port|split "-") 1 -}}
+-A OUTPUT -d {{$ip}} -p {{$proto}} -m {{$proto}} --match multiport --dports {{$sport}}:{{$fport}} -m conntrack --ctstate NEW -j {{$policy}}
+{{end -}}
+{{if $svc|regexMatch "^[a-z]+" -}}
+# rule: {{$svc}}
+{{range service ($svc|trimSpace) "any" -}}
+-A OUTPUT -d {{.Address}} -p tcp -m tcp --dport {{.Port}} -m conntrack --ctstate NEW -j {{$policy}}
+{{end -}}
+{{end -}}
+{{end -}}
+{{end -}}
+{{end}}
+# DNS
+-A OUTPUT -p udp --dport 53 -j dns-chain
+# NTP
+-A OUTPUT -p udp --dport 123 -d 0.0.0.0/0 -j {{$policy}}
+# {{$policy}} invalid
+-A OUTPUT -p tcp ! --syn -m state --state NEW -j {{$policy}}
+COMMIT

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -51,10 +52,11 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 		return false
 	}
 	log.Printf("Enabling egresstrator for %v\n", containerId)
+	log.Println(dockerEnv)
 
 	config := container.Config{
 		Image: "egresstrator",
-		Cmd:   []string{"0.0.0.0/0"},
+		Cmd:   []string{"set-egress"},
 		Env:   dockerEnv,
 	}
 	hostConfig := container.HostConfig{
@@ -73,7 +75,19 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 		log.Println(err)
 		return false
 	}
+	// get container logs for 5 seconds...
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	reader, err := c.ContainerLogs(ctx, createResp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	content, _ := ioutil.ReadAll(reader)
+	log.Println(string(content))
 
+	if err != nil && err != io.EOF {
+		log.Fatal(err)
+	}
 	return true
 }
 
