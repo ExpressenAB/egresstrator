@@ -53,7 +53,7 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 	log.Printf("Enabling egresstrator for %v\n", containerId)
 
 	config := container.Config{
-		Image: "bonniernews/routestrator:latest",
+		Image: "egresstrator",
 		Cmd:   []string{"0.0.0.0/0"},
 		Env:   dockerEnv,
 	}
@@ -62,7 +62,7 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
 		AutoRemove:  true,
 	}
-	containerName := fmt.Sprintf("routestrator-%v", containerId)
+	containerName := fmt.Sprintf("egresstrator-%v", containerId)
 	createResp, err := c.ContainerCreate(context.Background(), &config, &hostConfig, &network.NetworkingConfig{}, containerName)
 	if err != nil {
 		log.Println(err)
