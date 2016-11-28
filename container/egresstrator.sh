@@ -13,7 +13,6 @@ set_egress() {
     -template "iptables.ctmpl:/iptables:/egresstrator.sh run" \
     -wait 1s:2s \
     -once
-    cat /iptables
 }
 
 clear_egress() {
@@ -23,8 +22,8 @@ clear_egress() {
 
 run() {
     sleep 1
-    cat /iptables
     cat /iptables | iptables-restore
+    iptables-save
     exit 0
 }
 
