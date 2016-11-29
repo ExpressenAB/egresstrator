@@ -30,7 +30,7 @@ type Container struct {
 	Image string
 }
 
-func doRoutestration(containerId string, c *client.Client, dockerEnv []string) bool {
+func doRoutestration(containerId string, c *client.Client, dockerEnv []string, containerImage string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -55,7 +55,7 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 	log.Println(dockerEnv)
 
 	config := container.Config{
-		Image: "egresstrator",
+		Image: containerImage,
 		Cmd:   []string{"set-egress"},
 		Env:   dockerEnv,
 	}
@@ -63,6 +63,7 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 		CapAdd:      []string{"NET_ADMIN"},
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
 		AutoRemove:  true,
+		UsernsMode:  "host",
 	}
 	containerName := fmt.Sprintf("egresstrator-%v", containerId)
 	createResp, err := c.ContainerCreate(context.Background(), &config, &hostConfig, &network.NetworkingConfig{}, containerName)
@@ -83,9 +84,12 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string) b
 		log.Fatal(err)
 	}
 	content, _ := ioutil.ReadAll(reader)
-	log.Println(string(content))
-
 	if err != nil && err != io.EOF {
+		log.Fatal(err)
+	}
+	log.Println(string(content))
+	err = c.ContainerRemove(context.Background(), createResp.ID, types.ContainerRemoveOptions{})
+	if err != nil {
 		log.Fatal(err)
 	}
 	return true
@@ -121,6 +125,11 @@ func main() {
 			Usage:  "Custom consul template",
 			EnvVar: "CONSUL_TEMPLATE",
 		},
+		cli.StringFlag{
+			Name:  "image, i",
+			Usage: "Docker image name",
+			Value: "expressenab/egresstrator:latest",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -139,6 +148,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Printf("Pulling image: %v", c.String("image"))
+		resp, err := dockerClient.ImagePull(context.Background(), c.String("image"), types.ImagePullOptions{})
+		if err != nil {
+			log.Fatal(err)
+		}
+		body, err := ioutil.ReadAll(resp)
+		log.Printf("Image pulled: %v", string(body))
 		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
 	Loop:
 		for {
@@ -151,7 +167,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doRoutestration(e.ID, dockerClient, dockerEnv)
+					go doRoutestration(e.ID, dockerClient, dockerEnv, c.String("image"))
 				}
 			}
 		}
