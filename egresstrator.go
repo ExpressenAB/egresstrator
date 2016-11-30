@@ -30,7 +30,7 @@ type Container struct {
 	Image string
 }
 
-func doRoutestration(containerId string, c *client.Client, dockerEnv []string, containerImage string) bool {
+func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -48,15 +48,15 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string, c
 	}
 
 	if !enable {
-		log.Printf("Not enabling egresstrator for %v\n", containerId)
+		log.Printf("Egresstrator not enabled on %v\n", containerId)
 		return false
 	}
-	log.Printf("Enabling egresstrator for %v\n", containerId)
+	log.Printf("%s egress rules for %v\n", strings.ToTitle(mode), containerId)
 	log.Println(dockerEnv)
 
 	config := container.Config{
 		Image: containerImage,
-		Cmd:   []string{"set-egress"},
+		Cmd:   []string{mode + "-egress"},
 		Env:   dockerEnv,
 	}
 	hostConfig := container.HostConfig{
@@ -95,6 +95,63 @@ func doRoutestration(containerId string, c *client.Client, dockerEnv []string, c
 	return true
 }
 
+func initApp(c *cli.Context) (*client.Client, []string) {
+	log.Println("Starting egresstrator...")
+	// handle args
+	dockerEnv := []string{}
+	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_ADDR=%v", c.GlobalString("consul")))
+	if c.GlobalIsSet("consul-token") {
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEM=%v", c.GlobalString("consul-token")))
+	}
+	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.GlobalString("kv-path")))
+	if c.GlobalIsSet("template") {
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.GlobalString("template")))
+	}
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Pulling image: %v", c.GlobalString("image"))
+	resp, err := dockerClient.ImagePull(context.Background(), c.GlobalString("image"), types.ImagePullOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp)
+	log.Printf("Image pulled: %v", string(body))
+	return dockerClient, dockerEnv
+}
+
+func doCommands(c *cli.Context) error {
+
+	containerID := ""
+	command := c.Command.Name
+
+	if c.Bool("all") {
+		log.Println("Execute on all running containers")
+	} else if len(c.Args()) == 0 {
+		cli.ShowCommandHelp(c, command)
+		return cli.NewExitError("Error: Container ID not specified as argument", 1)
+	} else {
+		containerID = strings.ToLower(c.Args().Get(0))
+	}
+
+	dockerClient, dockerEnv := initApp(c)
+
+	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	if c.Bool("all") {
+		for _, container := range containers {
+			doEgresstration(container.ID, dockerClient, dockerEnv, c.GlobalString("image"), command)
+		}
+	} else {
+		doEgresstration(containerID, dockerClient, dockerEnv, c.GlobalString("image"), command)
+	}
+	return nil
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "egresstrator"
@@ -102,6 +159,36 @@ func main() {
 		"   Specify egress rules with EGRESSTRATOR_ACL=myservice,otherservice"
 	app.Version = "0.0.1"
 	app.Compiled = time.Now()
+
+	app.Commands = []cli.Command{
+		{
+			Name:  "set",
+			Usage: "Set egress rules on specified container",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "Set egress rules on all running containers",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return doCommands(c)
+			},
+		},
+		{
+			Name:  "clear",
+			Usage: "Clear egress rules on specified container",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "all, a",
+					Usage: "Clear egress rules on all running containers",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return doCommands(c)
+			},
+		},
+	}
+
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "consul, c",
@@ -133,28 +220,7 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		log.Println("Starting egresstrator...")
-		// handle args
-		dockerEnv := []string{}
-		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_ADDR=%v", c.String("consul")))
-		if c.GlobalIsSet("consul-token") {
-			dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEM=%v", c.String("consul-token")))
-		}
-		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.String("kv-path")))
-		if c.GlobalIsSet("template") {
-			dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.String("template")))
-		}
-		dockerClient, err := client.NewEnvClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Pulling image: %v", c.String("image"))
-		resp, err := dockerClient.ImagePull(context.Background(), c.String("image"), types.ImagePullOptions{})
-		if err != nil {
-			log.Fatal(err)
-		}
-		body, err := ioutil.ReadAll(resp)
-		log.Printf("Image pulled: %v", string(body))
+		dockerClient, dockerEnv := initApp(c)
 		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
 	Loop:
 		for {
@@ -167,7 +233,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doRoutestration(e.ID, dockerClient, dockerEnv, c.String("image"))
+					go doEgresstration(e.ID, dockerClient, dockerEnv, c.GlobalString("image"), "set")
 				}
 			}
 		}
