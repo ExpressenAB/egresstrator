@@ -1,4 +1,4 @@
-SOURCEDIR=.
+SOURCEDIR := $(shell pwd)
 SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 
 NAME=egresstrator
@@ -12,7 +12,7 @@ all: container build
 
 container:
 	@mkdir -p build/
-	cd container && docker build . -t ${NAME}:latest && docker save -o ../build/${NAME}.tar ${NAME}:latest 
+	cd container && docker build . -t ${NAME}:latest && docker save -o ../build/${NAME}.tar ${NAME}:latest
 	go-bindata -o container.go -prefix "build/" build/${NAME}.tar
 
 build:
@@ -30,7 +30,7 @@ xbuild: clean container
 		-output="build/{{.Dir}}_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)"
 
 clean:
-	@rm -rf build/ && rm -rf bin/ && rm -f container.go 
+	@rm -rf build/ && rm -rf bin/ && rm -f container.go
 
 package: xbuild
 	$(eval FILES := $(shell ls build))
@@ -39,6 +39,10 @@ package: xbuild
 		(cd $(shell pwd)/build && tar -zcvf tgz/$$f.tar.gz $$f); \
 		echo $$f; \
 	done
+
+rpm:
+	@mkdir -p build/rpm
+	docker run --rm -it -v $(SOURCEDIR):/docker centos:7 /docker/package/rpm/build_rpm.sh ${VERSION}
 
 .PHONY: all build xbuild package container
 
