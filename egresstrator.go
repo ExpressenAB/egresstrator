@@ -115,7 +115,7 @@ func imageLoad(dockerClient *client.Client) error {
 	if err != nil {
 		log.Fatal("Embedded image not found")
 	}
-	
+
 	image := bytes.NewReader(data)
 
 	resp, err := dockerClient.ImageLoad(context.Background(), image, true)
