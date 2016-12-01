@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"bytes"
 
 	"golang.org/x/net/context"
 
@@ -97,7 +98,36 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	return true
 }
 
-func initApp(c *cli.Context) (*client.Client, []string) {
+func imagePull(dockerClient *client.Client, image string) {
+	log.Printf("Pulling image: %v", image)
+	resp, err := dockerClient.ImagePull(context.Background(), image, types.ImagePullOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp)
+	log.Printf("Docker: %v", string(body))
+}
+
+func imageLoad(dockerClient *client.Client) error {
+	log.Println("Loading embedded image: egresstrator:latest")
+
+	data, err := Asset("egresstrator.tar")
+	if err != nil {
+		log.Fatal("Embedded image not found")
+	}
+
+	image := bytes.NewReader(data)
+
+	resp, err := dockerClient.ImageLoad(context.Background(), image, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	log.Printf(string(body))
+	return err
+}
+
+func initApp(c *cli.Context) (*client.Client, []string, string) {
 	log.Println("Starting egresstrator...")
 	// handle args
 	dockerEnv := []string{}
@@ -113,17 +143,19 @@ func initApp(c *cli.Context) (*client.Client, []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Pulling image: %v", c.GlobalString("image"))
-	resp, err := dockerClient.ImagePull(context.Background(), c.GlobalString("image"), types.ImagePullOptions{})
-	if err != nil {
-		log.Fatal(err)
+
+	image := "egresstrator:latest"
+	if c.GlobalIsSet("image") {
+		imagePull(dockerClient, c.GlobalString("image"))
+		image = c.GlobalString("image")
+	} else {
+		imageLoad(dockerClient)
 	}
-	body, err := ioutil.ReadAll(resp)
-	log.Printf("Image pulled: %v", string(body))
-	return dockerClient, dockerEnv
+
+	return dockerClient, dockerEnv, image
 }
 
-func doCommands(c *cli.Context) error {
+func doSetClearCommand(c *cli.Context) error {
 
 	containerID := ""
 	command := c.Command.Name
@@ -137,7 +169,7 @@ func doCommands(c *cli.Context) error {
 		containerID = strings.ToLower(c.Args().Get(0))
 	}
 
-	dockerClient, dockerEnv := initApp(c)
+	dockerClient, dockerEnv, image := initApp(c)
 
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
@@ -146,10 +178,10 @@ func doCommands(c *cli.Context) error {
 
 	if c.Bool("all") {
 		for _, container := range containers {
-			doEgresstration(container.ID, dockerClient, dockerEnv, c.GlobalString("image"), command)
+			doEgresstration(container.ID, dockerClient, dockerEnv, image, command)
 		}
 	} else {
-		doEgresstration(containerID, dockerClient, dockerEnv, c.GlobalString("image"), command)
+		doEgresstration(containerID, dockerClient, dockerEnv, image, command)
 	}
 	return nil
 }
@@ -173,7 +205,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return doCommands(c)
+				return doSetClearCommand(c)
 			},
 		},
 		{
@@ -186,7 +218,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return doCommands(c)
+				return doSetClearCommand(c)
 			},
 		},
 	}
@@ -217,12 +249,12 @@ func main() {
 		cli.StringFlag{
 			Name:  "image, i",
 			Usage: "Docker image name",
-			Value: "expressenab/egresstrator:latest",
 		},
 	}
 
 	app.Action = func(c *cli.Context) error {
-		dockerClient, dockerEnv := initApp(c)
+		dockerClient, dockerEnv, image := initApp(c)
+		log.Println("Listening on docker events")
 		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
 	Loop:
 		for {
@@ -235,7 +267,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doEgresstration(e.ID, dockerClient, dockerEnv, c.GlobalString("image"), "set")
+					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set")
 				}
 			}
 		}
