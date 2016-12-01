@@ -1,0 +1,15 @@
+[Unit]
+Description=Egresstrator
+Documentation=https://github.com/ExpressenAB/egresstrator/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/egresstrator
+ExecStart=/usr/sbin/egresstrator $CMD_OPTS
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
