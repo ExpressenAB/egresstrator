@@ -18,6 +18,8 @@ import (
 	"github.com/urfave/cli"
 )
 
+var Version string
+
 type Event struct {
 	Id     string `json:"id"`
 	Status string `json:"status"`
@@ -157,7 +159,7 @@ func main() {
 	app.Name = "egresstrator"
 	app.Usage = "Set egress rules in network namespaces.\n   Enable egresstrator with EGRESSTRATOR_ENABLE=1 in your container.\n" +
 		"   Specify egress rules with EGRESSTRATOR_ACL=myservice,otherservice"
-	app.Version = "0.0.1"
+	app.Version = Version
 	app.Compiled = time.Now()
 
 	app.Commands = []cli.Command{
