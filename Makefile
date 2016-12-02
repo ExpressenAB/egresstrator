@@ -1,3 +1,4 @@
+GOTOOLS=github.com/jteeuwen/go-bindata/... github.com/mitchellh/gox/...
 SOURCEDIR := $(shell pwd)
 SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 
@@ -43,6 +44,12 @@ package: xbuild
 rpm:
 	@mkdir -p build/rpm
 	docker run --rm -it -v $(SOURCEDIR):/docker centos:7 /docker/package/rpm/build_rpm.sh ${VERSION}
+
+tools:
+	go get -u -v $(GOTOOLS)
+
+ci: tools xbuild package rpm
+
 
 .PHONY: all build xbuild package container
 
