@@ -25,7 +25,8 @@ rpmbuild -ba --define "_version ${1}" rpmbuild/SPECS/$package.spec
 
 echo "Copying rpms back to build folder...."
 cp -f ${HOME}/rpmbuild/RPMS/x86_64/*.rpm /docker/build/rpm/
+chmod 777 /docker/build/rpm/*
 
 echo "Successfully built RPM for version ${1}:"
-ls -1 /docker/build/rpm/
+ls -altrh /docker/build/rpm/
 exit 0
