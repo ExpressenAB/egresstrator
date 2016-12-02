@@ -34,7 +34,7 @@ type Container struct {
 	Image string
 }
 
-func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string) bool {
+func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string, template string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -63,11 +63,16 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 		Cmd:   []string{mode + "-egress"},
 		Env:   dockerEnv,
 	}
+	var bind []string
+	if template != "" {
+		bind = []string{fmt.Sprintf("%v:/iptables.ctmpl", template)}
+	}
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
 		AutoRemove:  false,
 		UsernsMode:  "host",
+		Binds:       bind,
 	}
 	containerName := fmt.Sprintf("egresstrator-%v", containerId)
 	createResp, err := c.ContainerCreate(context.Background(), &config, &hostConfig, &network.NetworkingConfig{}, containerName)
@@ -144,7 +149,7 @@ func imageLoad(dockerClient *client.Client) {
 	log.Printf(string(body))
 }
 
-func initApp(c *cli.Context) (*client.Client, []string, string) {
+func initApp(c *cli.Context) (*client.Client, []string, string, string) {
 	log.Println("Starting egresstrator...")
 	// handle args
 	dockerEnv := []string{}
@@ -153,8 +158,15 @@ func initApp(c *cli.Context) (*client.Client, []string, string) {
 		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEN=%v", c.GlobalString("consul-token")))
 	}
 	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.GlobalString("kv-path")))
+	var template string
 	if c.GlobalIsSet("template") {
+		template = c.GlobalString("template")
+		if _, err := os.Stat(template); os.IsNotExist(err) {
+			log.Fatalf("Custom template does not exists: %v", template)
+		}
 		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.GlobalString("template")))
+	} else {
+		template = ""
 	}
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
@@ -169,7 +181,7 @@ func initApp(c *cli.Context) (*client.Client, []string, string) {
 		imageLoad(dockerClient)
 	}
 
-	return dockerClient, dockerEnv, image
+	return dockerClient, dockerEnv, image, template
 }
 
 func doSetClearCommand(c *cli.Context) error {
@@ -186,7 +198,7 @@ func doSetClearCommand(c *cli.Context) error {
 		containerID = strings.ToLower(c.Args().Get(0))
 	}
 
-	dockerClient, dockerEnv, image := initApp(c)
+	dockerClient, dockerEnv, image, _ := initApp(c)
 
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
@@ -195,10 +207,10 @@ func doSetClearCommand(c *cli.Context) error {
 
 	if c.Bool("all") {
 		for _, container := range containers {
-			doEgresstration(container.ID, dockerClient, dockerEnv, image, command)
+			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "")
 		}
 	} else {
-		doEgresstration(containerID, dockerClient, dockerEnv, image, command)
+		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "")
 	}
 	return nil
 }
@@ -270,7 +282,7 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		dockerClient, dockerEnv, image := initApp(c)
+		dockerClient, dockerEnv, image, template := initApp(c)
 		log.Println("Listening on docker events")
 		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
 	Loop:
@@ -284,7 +296,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set")
+					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template)
 				}
 			}
 		}
