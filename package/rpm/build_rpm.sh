@@ -12,10 +12,11 @@ echo "Setting up rpm dev tree..."
 rpmdev-setuptree
 
 echo "Copying files for build..."
-ln -s /docker/package/rpm/$package.spec $HOME/rpmbuild/SPECS/
-find /docker/package/sources -type f -exec ln -sf {} $HOME/rpmbuild/SOURCES/ \;
+cp /docker/package/rpm/$package.spec $HOME/rpmbuild/SPECS/
+find /docker/package/sources -type f -exec cp -f {} $HOME/rpmbuild/SOURCES/ \;
 cp /docker/build/${package}_${1}_${os}_${arch}/${package} $HOME/rpmbuild/SOURCES/${package}
 cd ${HOME}
+chown -R root:root rpmbuild
 echo "Downloading dependencies..."
 spectool -g -R rpmbuild/SPECS/$package.spec
 
