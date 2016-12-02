@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/urfave/cli"
 )
 
@@ -91,12 +92,12 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	}
 	defer reader.Close()
 
-	content, _ := ioutil.ReadAll(reader)
-	if err != nil && err != io.EOF {
-		log.Fatal(err)
+	var stdout, stderr bytes.Buffer
+	if inspectedContainer.Config.Tty {
+		_, err = io.Copy(&stdout, reader)
+	} else {
+		_, err = stdcopy.StdCopy(&stdout, &stderr, reader)
 	}
-
-	log.Println(string(content))
 
 	if ctx.Err() == context.DeadlineExceeded {
 		log.Println("Egresstrator container not stopping. Shutting down")
@@ -105,6 +106,8 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 			log.Println(err)
 		}
 	}
+	log.Printf("%s", stderr.String())
+	log.Printf("%s", stdout.String())
 
 	err = c.ContainerRemove(context.Background(), createResp.ID, types.ContainerRemoveOptions{})
 	if err != nil {
