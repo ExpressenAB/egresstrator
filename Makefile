@@ -4,7 +4,7 @@ SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 
 NAME=egresstrator
 
-VERSION=0.0.1
+VERSION=0.0.2
 BUILD_TIME=`date +%FT%T%z`
 
 LDFLAGS=-ldflags "-X main.Version=${VERSION}"

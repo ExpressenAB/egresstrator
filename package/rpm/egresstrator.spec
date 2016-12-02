@@ -1,6 +1,6 @@
 Name:           egresstrator
 Version:        %{_version}
-Release:        2
+Release:        1
 Summary:        Docker iptables egress orchestrator.
 Group:          System Environment/Daemons
 License:        Apache Software License
@@ -47,5 +47,7 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Dec 2 2016 Magnus Bengtsson <magnus.bengtsson@expressen.se>
+- Release 0.0.2
 * Thu Dec 1 2016 Magnus Bengtsson <magnus.bengtsson@expressen.se>
 - Initial release 0.0.1
