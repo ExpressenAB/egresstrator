@@ -3,13 +3,13 @@ sudo: required
 services:
   - docker
 install:
-  - go get -u github.com/jteeuwen/go-bindata/...
-  - make ci
+  - make tools
 go:
 - 1.7
 env:
   global:
   - GOARCH=amd64
+before_deploy: make ci
 deploy:
   provider: releases
   api_key:
