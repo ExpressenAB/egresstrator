@@ -117,6 +117,12 @@
 			"revisionTime": "2016-11-24T18:16:57Z"
 		},
 		{
+			"checksumSHA1": "FHOOypod1NsTgQffapTFhtZ49+8=",
+			"path": "github.com/docker/docker/pkg/stdcopy",
+			"revision": "a756c1ac659468bb8d6ec9ee2e1182fc6cae4002",
+			"revisionTime": "2016-12-01T21:56:11Z"
+		},
+		{
 			"checksumSHA1": "8I0Ez+aUYGpsDEVZ8wN/Ztf6Zqs=",
 			"path": "github.com/docker/docker/pkg/tlsconfig",
 			"revision": "03ba9a4922237cde481249fb5d58ec3c26a22b47",
