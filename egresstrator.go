@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"bytes"
 
 	"golang.org/x/net/context"
 
@@ -65,7 +65,7 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
-		AutoRemove:  true,
+		AutoRemove:  false,
 		UsernsMode:  "host",
 	}
 	containerName := fmt.Sprintf("egresstrator-%v", containerId)
@@ -79,18 +79,33 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 		log.Println(err)
 		return false
 	}
-	// get container logs for 5 seconds...
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	// Get container logs for MAX 30 seconds or until container stops
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
 	defer cancel()
+
 	reader, err := c.ContainerLogs(ctx, createResp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true})
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer reader.Close()
+
 	content, _ := ioutil.ReadAll(reader)
 	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
+
 	log.Println(string(content))
+
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Println("Egresstrator container not stopping. Shutting down")
+		err := c.ContainerKill(context.Background(), createResp.ID, "KILL")
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
 	err = c.ContainerRemove(context.Background(), createResp.ID, types.ContainerRemoveOptions{})
 	if err != nil {
 		log.Fatal(err)
@@ -108,7 +123,7 @@ func imagePull(dockerClient *client.Client, image string) {
 	log.Printf("Docker: %v", string(body))
 }
 
-func imageLoad(dockerClient *client.Client) error {
+func imageLoad(dockerClient *client.Client) {
 	log.Println("Loading embedded image: egresstrator:latest")
 
 	data, err := Asset("egresstrator.tar")
@@ -124,7 +139,6 @@ func imageLoad(dockerClient *client.Client) error {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	log.Printf(string(body))
-	return err
 }
 
 func initApp(c *cli.Context) (*client.Client, []string, string) {
