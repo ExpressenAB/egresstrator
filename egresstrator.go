@@ -150,7 +150,7 @@ func initApp(c *cli.Context) (*client.Client, []string, string) {
 	dockerEnv := []string{}
 	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_ADDR=%v", c.GlobalString("consul")))
 	if c.GlobalIsSet("consul-token") {
-		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEM=%v", c.GlobalString("consul-token")))
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEN=%v", c.GlobalString("consul-token")))
 	}
 	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.GlobalString("kv-path")))
 	if c.GlobalIsSet("template") {
