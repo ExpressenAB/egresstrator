@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"bytes"
 
 	"golang.org/x/net/context"
 
@@ -65,7 +65,7 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
 		NetworkMode: container.NetworkMode(fmt.Sprintf("container:%v", containerId)),
-		AutoRemove:  true,
+		AutoRemove:  false,
 		UsernsMode:  "host",
 	}
 	containerName := fmt.Sprintf("egresstrator-%v", containerId)
