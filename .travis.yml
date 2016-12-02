@@ -1,0 +1,23 @@
+language: go
+sudo: required
+services:
+  - docker
+install:
+  - go get -u github.com/jteeuwen/go-bindata/...
+  - make ci
+go:
+- 1.7
+env:
+  global:
+  - GOARCH=amd64
+deploy:
+  provider: releases
+  api_key:
+    secure: hsMfIYGFWBZBwu2eptK0R5fQP4RiJDTG6qAB2opn3oUoOXAEhr6Azm+wo5xG+ZGFCoUR4CVC2ZwcHf9VhQJBhOJQrJCUzYwe1IsbdbkE70u4rLUUFaP81mgCyrIzm3youp0osJDdSBY8e6BMUI1HSDIo9JTfqMfc5IyMOK/LbiOovr/vEzIx5rSCecARW6D+3b7IvboCBoj8R6T6r4I4w65oZT5dEv48lkfr+c0UbHW5SURQ5q8up0F7BLANHLRDzf4cSonSoCSsg9x82d/DBhgqR0VIa7DSDCztkXOqlqnRV591IWG2sxHDW2wj7QioT2y0Fn0ikfEP/iIxr6ywQt/LK6FQbpECABJzNup1juy5wQIRTaaDqfcq2wwkYl4hjJplxeDybcnme4n8W7dStqT0vSkae5Y96r57ERAg/Xevx849c/v7LmC/m9vLtV+Dwl7k8w/zNFXNS632TtkeOnAAUOmz/Log5BPZxc+m5+JZMBIezUS/WPYkY1YOg7xtqK8kB6tGdIGw2tTt3uRBCSLBEcQhv9I12xYzydn2kq9l/rL8cVQ+4V0MT2IZBaa6lwk+viuUvUg94UzpgfwfsXZZO9jWmVTQahAsQ8sThHfe2UKRFMhRKR7XLmVkwQ17oUEma81DYyphgl6+U++tMT25SKE97bScCHoCtMZGYSs=
+  file_glob: true
+  file:
+    - build/rpm/*.rpm
+    - build/tgz/*.
+  on:
+    repo: ExpressenAB/egresstrator
+    tags: true
