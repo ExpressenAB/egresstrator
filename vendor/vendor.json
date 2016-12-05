@@ -105,6 +105,12 @@
 			"revisionTime": "2016-11-24T18:16:57Z"
 		},
 		{
+			"checksumSHA1": "IBJy2zPEnYmcFJ3lM1eiRWnCxTA=",
+			"path": "github.com/docker/docker/api/types/volume",
+			"revision": "3d1383f83460e8becdd7c8ed0d57e600b6e2696a",
+			"revisionTime": "2016-12-02T13:41:21Z"
+		},
+		{
 			"checksumSHA1": "CALdvH14EIDr8do2QT8AsGCo5Bs=",
 			"path": "github.com/docker/docker/client",
 			"revision": "03ba9a4922237cde481249fb5d58ec3c26a22b47",
