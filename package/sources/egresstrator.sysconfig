@@ -1,5 +1,6 @@
 #
 # Add specific environment variables here for egresstrator
 #
+# CMD_OPTS="-ssl -ssl-ca-cert=/etc/pki/certs/CA.crt"
 # Default to 1.22 ~ Docker 1.10
 DOCKER_API_VERSION=1.22
