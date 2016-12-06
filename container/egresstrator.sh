@@ -9,10 +9,15 @@ usage() {
 
 set_egress() {
     echo "set-egress"
+    if [ -f /CA.crt ]; then
+        SSL_CA_CERT="-ssl-ca-cert /CA.crt"
+    else
+        SSL_CA_CERT=""
+    fi
     /usr/bin/consul-template \
     -template "iptables.ctmpl:/iptables:/egresstrator.sh run" \
     -wait 1s:2s \
-    -once
+    -once ${SSL_CA_CERT}
 }
 
 clear_egress() {
