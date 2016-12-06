@@ -47,6 +47,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Dec 6 2016 Magnud Bengtsson
+- Release 0.2.0
+- Add support for SSL and custom consul-template templates
 * Fri Dec 2 2016 Magnus Bengtsson <magnus.bengtsson@expressen.se>
 - Release 0.0.2
 * Thu Dec 1 2016 Magnus Bengtsson <magnus.bengtsson@expressen.se>
