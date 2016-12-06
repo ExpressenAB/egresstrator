@@ -34,7 +34,7 @@ type Container struct {
 	Image string
 }
 
-func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string, template string) bool {
+func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string, template string, caCert string) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -65,7 +65,10 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	}
 	var bind []string
 	if template != "" {
-		bind = []string{fmt.Sprintf("%v:/iptables.ctmpl", template)}
+		bind = append(bind, fmt.Sprintf("%v:/iptables.ctmpl", template))
+	}
+	if caCert != "" {
+		bind = append(bind, fmt.Sprintf("%v:/CA.crt", caCert))
 	}
 	hostConfig := container.HostConfig{
 		CapAdd:      []string{"NET_ADMIN"},
@@ -149,7 +152,7 @@ func imageLoad(dockerClient *client.Client) {
 	log.Printf(string(body))
 }
 
-func initApp(c *cli.Context) (*client.Client, []string, string, string) {
+func initApp(c *cli.Context) (*client.Client, []string, string, string, string) {
 	log.Println("Starting egresstrator...")
 	// handle args
 	dockerEnv := []string{}
@@ -158,16 +161,32 @@ func initApp(c *cli.Context) (*client.Client, []string, string, string) {
 		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_HTTP_TOKEN=%v", c.GlobalString("consul-token")))
 	}
 	dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_PATH=%v", c.GlobalString("kv-path")))
+
 	var template string
 	if c.GlobalIsSet("template") {
 		template = c.GlobalString("template")
 		if _, err := os.Stat(template); os.IsNotExist(err) {
 			log.Fatalf("Custom template does not exists: %v", template)
 		}
-		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", c.GlobalString("template")))
+		dockerEnv = append(dockerEnv, fmt.Sprintf("CONSUL_TEMPLATE=%v", template))
 	} else {
 		template = ""
 	}
+
+	if c.Bool("ssl") {
+		dockerEnv = append(dockerEnv, "CONSUL_HTTP_SSL=1")
+	}
+
+	var caCert string
+	if c.GlobalIsSet("ssl-ca-cert") {
+		caCert = c.GlobalString("ssl-ca-cert")
+		if _, err := os.Stat(caCert); os.IsNotExist(err) {
+			log.Fatalf("Custom SSL CA cert does not exists: %v", caCert)
+		}
+	} else {
+		caCert = ""
+	}
+
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
 		log.Fatal(err)
@@ -181,7 +200,7 @@ func initApp(c *cli.Context) (*client.Client, []string, string, string) {
 		imageLoad(dockerClient)
 	}
 
-	return dockerClient, dockerEnv, image, template
+	return dockerClient, dockerEnv, image, template, caCert
 }
 
 func doSetClearCommand(c *cli.Context) error {
@@ -198,7 +217,7 @@ func doSetClearCommand(c *cli.Context) error {
 		containerID = strings.ToLower(c.Args().Get(0))
 	}
 
-	dockerClient, dockerEnv, image, _ := initApp(c)
+	dockerClient, dockerEnv, image, _, _ := initApp(c)
 
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
@@ -207,10 +226,10 @@ func doSetClearCommand(c *cli.Context) error {
 
 	if c.Bool("all") {
 		for _, container := range containers {
-			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "")
+			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "", "")
 		}
 	} else {
-		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "")
+		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "", "")
 	}
 	return nil
 }
@@ -279,10 +298,18 @@ func main() {
 			Name:  "image, i",
 			Usage: "Docker image name",
 		},
+		cli.BoolFlag{
+			Name:  "ssl",
+			Usage: "Use SSL when accessing Consul",
+		},
+		cli.StringFlag{
+			Name:  "ssl-ca-cert",
+			Usage: "Path to a custom SSL CA cert to use when accessing Consul",
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
-		dockerClient, dockerEnv, image, template := initApp(c)
+		dockerClient, dockerEnv, image, template, caCert := initApp(c)
 		log.Println("Listening on docker events")
 		msg, errs := dockerClient.Events(context.Background(), types.EventsOptions{})
 	Loop:
@@ -296,7 +323,7 @@ func main() {
 			case e := <-msg:
 				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
-					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template)
+					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template, caCert)
 				}
 			}
 		}
