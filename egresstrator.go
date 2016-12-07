@@ -321,8 +321,8 @@ func main() {
 				}
 				break Loop
 			case e := <-msg:
-				log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 				if e.Status == "start" && e.Type == "container" {
+					log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
 					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template, caCert)
 				}
 			}
