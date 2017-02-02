@@ -34,7 +34,7 @@ type Container struct {
 	Image string
 }
 
-func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string, template string, caCert string) bool {
+func doEgresstration(containerId string, c *client.Client, dockerEnv []string, containerImage string, mode string, template string, caCert string, skipEnvRules bool) bool {
 	inspectedContainer, err := c.ContainerInspect(context.TODO(), containerId)
 	if err != nil {
 		log.Println(err)
@@ -42,12 +42,17 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	}
 
 	enable := false
-	for _, env := range inspectedContainer.Config.Env {
-		if env == "EGRESSTRATOR_ENABLE=1" {
-			enable = true
-		}
-		if strings.HasPrefix(env, "EGRESSTRATOR_ACL") {
-			dockerEnv = append(dockerEnv, env)
+
+	if skipEnvRules || mode == "clear" {
+		enable = true
+	} else {
+		for _, env := range inspectedContainer.Config.Env {
+			if env == "EGRESSTRATOR_ENABLE=1" {
+				enable = true
+			}
+			if strings.HasPrefix(env, "EGRESSTRATOR_ACL") {
+				dockerEnv = append(dockerEnv, env)
+			}
 		}
 	}
 
@@ -200,12 +205,15 @@ func initApp(c *cli.Context) (*client.Client, []string, string, string, string) 
 		imageLoad(dockerClient)
 	}
 
+	log.Printf("env: %v", dockerEnv)
 	return dockerClient, dockerEnv, image, template, caCert
 }
 
 func doSetClearCommand(c *cli.Context) error {
 
 	containerID := ""
+	skipEnvRules := c.IsSet("rules")
+
 	command := c.Command.Name
 
 	if c.Bool("all") {
@@ -219,6 +227,11 @@ func doSetClearCommand(c *cli.Context) error {
 
 	dockerClient, dockerEnv, image, _, _ := initApp(c)
 
+	if c.IsSet("rules") {
+		log.Println("Set rules: " + c.String("rules"))
+		dockerEnv = append(dockerEnv, "EGRESSTRATOR_ACL="+c.String("rules"))
+	}
+
 	containers, err := dockerClient.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		panic(err)
@@ -226,10 +239,10 @@ func doSetClearCommand(c *cli.Context) error {
 
 	if c.Bool("all") {
 		for _, container := range containers {
-			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "", "")
+			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "", "", skipEnvRules)
 		}
 	} else {
-		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "", "")
+		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "", "", skipEnvRules)
 	}
 	return nil
 }
@@ -250,6 +263,10 @@ func main() {
 				cli.BoolFlag{
 					Name:  "all, a",
 					Usage: "Set egress rules on all running containers",
+				},
+				cli.StringFlag{
+					Name:  "rules, r",
+					Usage: "Rules to use(Overrides container environment rules)",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -323,7 +340,7 @@ func main() {
 			case e := <-msg:
 				if e.Status == "start" && e.Type == "container" {
 					log.Printf("Got event: %v  %v - %v\n", e.Type, e.Status, e.ID)
-					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template, caCert)
+					go doEgresstration(e.ID, dockerClient, dockerEnv, image, "set", template, caCert, false)
 				}
 			}
 		}
