@@ -72,6 +72,7 @@ func doEgresstration(containerId string, c *client.Client, dockerEnv []string, c
 	if template != "" {
 		bind = append(bind, fmt.Sprintf("%v:/iptables.ctmpl", template))
 	}
+
 	if caCert != "" {
 		bind = append(bind, fmt.Sprintf("%v:/CA.crt", caCert))
 	}
@@ -225,7 +226,7 @@ func doSetClearCommand(c *cli.Context) error {
 		containerID = strings.ToLower(c.Args().Get(0))
 	}
 
-	dockerClient, dockerEnv, image, _, _ := initApp(c)
+	dockerClient, dockerEnv, image, template, caCert := initApp(c)
 
 	if c.IsSet("rules") {
 		log.Println("Set rules: " + c.String("rules"))
@@ -239,10 +240,10 @@ func doSetClearCommand(c *cli.Context) error {
 
 	if c.Bool("all") {
 		for _, container := range containers {
-			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, "", "", skipEnvRules)
+			doEgresstration(container.ID, dockerClient, dockerEnv, image, command, template, caCert, skipEnvRules)
 		}
 	} else {
-		doEgresstration(containerID, dockerClient, dockerEnv, image, command, "", "", skipEnvRules)
+		doEgresstration(containerID, dockerClient, dockerEnv, image, command, template, caCert, skipEnvRules)
 	}
 	return nil
 }
